@@ -213,7 +213,7 @@ var MoonbeamRuntimeBenchmarkConfigs = {
   },
 }
 
-function checkRuntimeBenchmarkCommand(command) {
+function checkPalletBenchmarkCommand(command) {
   let required = [
     "benchmark",
     "--pallet",
@@ -286,8 +286,8 @@ function matchMoonbeamPallet(palletIsh) {
   throw new Error(`Pallet argument not recognized: ${palletIsh}`);
 }
 
-function benchmarkRuntime(app, config, octokit) {
-  app.log("Waiting our turn to run benchmarkRuntime...")
+function benchmarkPallet(app, config, octokit) {
+  app.log("Waiting our turn to run benchmarkPallet...")
 
   return mutex.runExclusive(async function () {
     try {
@@ -303,7 +303,7 @@ function benchmarkRuntime(app, config, octokit) {
       // XXX: testing
       const repo = config.repo.startsWith("moonbeam") ? "moonbeam" : config.repo;
 
-      if (repo == "moonbeam" && config.id == "runtime") {
+      if (repo == "moonbeam" && config.id == "pallet") {
         benchConfig = MoonbeamRuntimeBenchmarkConfigs[command]
       } else {
         return errorResult(
@@ -345,7 +345,7 @@ function benchmarkRuntime(app, config, octokit) {
         benchCommand = benchCommand.replace("{pallet_folder}", palletInfo.dir)
       }
 
-      let missing = checkRuntimeBenchmarkCommand(benchCommand)
+      let missing = checkPalletBenchmarkCommand(benchCommand)
       if (missing.length > 0) {
         return errorResult(`Missing required flags: ${missing.toString()}`)
       }
