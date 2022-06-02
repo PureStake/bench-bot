@@ -199,7 +199,7 @@ module.exports = (app) => {
       // kick off the build/run process...
       // TODO: match usage
       let report
-      if (action == "runtime" {
+      if (action == "runtime") {
         report = await benchmarkRuntime(app, config, context.octokit)
       } else if (action == "rustup") {
         report = await benchRustup(app, config)
