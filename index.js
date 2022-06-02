@@ -142,6 +142,16 @@ module.exports = (app) => {
       const branch = pr.data.head.ref
       app.log.debug(`branch: ${branch}`)
 
+      // if 'help' was requested, make comment and end here
+      if (action == "help" || action == "--help") {
+        await context.octokit.issues.createComment(
+          context.issue({
+            body: usage(),
+          }),
+        );
+        return;
+      }
+
       var { stdout: toolchain, code: toolchainError } = shell.exec(
         "rustup show active-toolchain --verbose",
         { silent: false },
@@ -161,7 +171,7 @@ module.exports = (app) => {
       // generate a unique branch for our PR
       const bbBranch = `${branch}-benchbot-job-${new Date().getTime()}`;
 
-      const initialInfo = `Starting benchmark for branch: ${branch} (vs ${baseBranch})\nPR branch will be ${bbBranch}\n\nToolchain: \n${toolchain}\n\n Comment will be updated.`
+      const initialInfo = `Starting benchmark for branch: ${branch} (vs ${baseBranch})\nPR branch will be ${bbBranch}\n\nToolchain: \n${toolchain}\n\n This comment will be updated.`
       let comment_id = undefined
 
       app.log(initialInfo)
@@ -187,21 +197,24 @@ module.exports = (app) => {
       }
 
       // kick off the build/run process...
+      // TODO: match usage
       let report
-      if (action == "runtime" || action == "xcm") {
+      if (action == "runtime" {
         report = await benchmarkRuntime(app, config, context.octokit)
       } else if (action == "rustup") {
         report = await benchRustup(app, config)
       } else {
-        report = {
-          isError: true,
-          message: "Unsupported action",
-          error: `unsupported action: ${action}`,
-        };
+        await context.octokit.issues.updateComment({
+          owner,
+          repo,
+          comment_id,
+          body: `**Unsupported action: ${action}**\n\n${usage()}`,
+        });
+        return;
       }
       if (process.env.DEBUG) {
         console.log(report)
-        return
+        // return
       }
 
       if (report.isError) {
@@ -214,14 +227,12 @@ module.exports = (app) => {
         const output = `${report.message}${report.error ? `: ${report.error.toString()}` : ""
           }`
 
-        /*
         await context.octokit.issues.updateComment({
           owner,
           repo,
           comment_id,
           body: `Error running benchmark: **${branch}**\n\n<details><summary>stdout</summary>${output}</details>`,
         })
-        */
 
         return
       }
@@ -247,8 +258,13 @@ Toolchain: ${toolchain}
 
       const padding = 16
       const formattingLength =
-        bodyPrefix.length + bodySuffix.length + extraInfo.length + padding
-      const length = formattingLength + output.length
+        padding
+        + bodyPrefix ? bodyPrefix.length : 0
+        + bodySuffix ? bodySuffix.length : 0
+        + extraInfo ? extraInfo.length : 0;
+      const length =
+        formattingLength
+        + output ? output.length : 0;
       if (length >= githubCommentLimitLength) {
         output = `${output.slice(
           0,
@@ -289,3 +305,22 @@ ${extraInfo}
     }
   })
 }
+
+function usage() {
+  return `\`\`\`
+Benchbot usage:
+
+/bench --help
+        print this help output
+/bench <SUBCOMMAND>
+        run the given subcommand
+
+SUBCOMMAND:
+    pallet <pallet>
+            benchmark a specific pallet and update its weights.rs file
+    runtime
+            benchmark an entire runtime and update all pallet weights.rs files
+            (currently only supports moonbase runtime)
+\`\`\``;
+}
+
