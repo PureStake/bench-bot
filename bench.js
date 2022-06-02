@@ -53,19 +53,6 @@ function BenchContext(app, config) {
   }
 }
 
-//::node::import::native::sr25519::transfer_keep_alive::paritydb::small
-
-// const cargoRun = "cargo run --features=runtime-benchmarks --bin moonbeam -- ";
-const cargoRun = "cargo run ";
-
-var BenchConfigs = {
-  ed25519: {
-    title: "Import Benchmark (random transfers, ed25519 signed)",
-    benchCommand:
-      cargoRun + "benchmark --chain dev --execution=native --pallet \"*\" --extrinsic \"*\" --steps 32 --repeat 8 --json --record-proof"
-  },
-}
-
 const prepareBranch = async function (
   { contributor, owner, repo, bbRepo, bbRepoOwner, bbBranch, branch, baseBranch, getPushDomain, getBBPushDomain, },
   { benchContext },
@@ -142,49 +129,6 @@ const prepareBranch = async function (
   )
   if (error)
     return errorResult(`Failed to "git checkout -b" our secondary branch`);
-}
-
-function benchBranch(app, config) {
-  app.log("Waiting our turn to run benchBranch...")
-
-  return mutex.runExclusive(async function () {
-    try {
-      if (config.repo != "moonbeam") {
-        return errorResult("Node benchmarks only available on Moonbeam.")
-      }
-
-      console.log(`config id: ${config.id}`);
-
-      var id = config.id
-      var benchConfig = BenchConfigs[id]
-      if (!benchConfig) {
-        return errorResult(`Bench configuration for "${id}" was not found`)
-      }
-
-      console.log(`bench command: ${benchConfig.benchCommand}`);
-
-      const collector = new libCollector.Collector()
-      var benchContext = new BenchContext(app, config)
-      var { title, benchCommand } = benchConfig
-      app.log(`Started benchmark "${title}."`)
-
-      var error = await prepareBranch(config, { benchContext })
-      if (error) return error
-
-      var { stderr, error, stdout } = benchContext.runTask(
-        benchCommand,
-        `Benching branch ${config.branch}...`,
-      )
-      if (error) return errorResult(stderr)
-
-      await collector.CollectBranchCustomRunner(stdout)
-      let output = await collector.Report()
-
-      return { title, output, extraInfo: "", benchCommand }
-    } catch (error) {
-      return errorResult("Caught exception in benchBranch", error)
-    }
-  })
 }
 
 var MoonbeamRuntimeBenchmarkConfigs = {
