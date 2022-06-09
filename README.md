@@ -19,6 +19,7 @@ Create a `.env` file in the root with the following:
 
 ```
 APP_ID=<App id from Github App Settings>
+INSTALLATION_ID=<Installation id from Github Settings>
 BASE_BRANCH=<the default branch for merging into the PRs, e.g. master>
 CLIENT_ID=<Client ID from Github App Settings>
 CLIENT_SECRET=<Client ID from Github App Settings>
