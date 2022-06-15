@@ -1,8 +1,10 @@
-const cp = require("child_process")
-const path = require("path")
-const fs = require("fs")
+import { Probot } from 'probot'
+import * as cp from "child_process"
+import * as path from "path"
+import * as fs from "fs"
+import { GlobalConfig } from '../utils/config'
 
-function errorResult(message, error) {
+function errorResult(message: string, error?: string) {
   return { isError: true, message, error }
 }
 
@@ -12,10 +14,10 @@ const Mutex = require("async-mutex").Mutex
 const mutex = new Mutex()
 var shell = require("shelljs")
 
-var libCollector = require("./collector")
+var libCollector = require("../../collector")
 
 // really just a context for running processes from a shell...
-function BenchContext(app, config) {
+function BenchContext(app: Probot, config: GlobalConfig) {
   var self = this
   self.app = app
   self.config = config
@@ -25,7 +27,7 @@ function BenchContext(app, config) {
       stderr = "",
       error = true
 
-    console.log(`BenchContext.runTask(): ${cmd}`);
+    console.log(`BenchContext.runTask(): ${cmd}`)
 
     try {
       if (title) {
@@ -56,18 +58,30 @@ function BenchContext(app, config) {
 //::node::import::native::sr25519::transfer_keep_alive::paritydb::small
 
 // const cargoRun = "cargo run --features=runtime-benchmarks --bin moonbeam -- ";
-const cargoRun = "cargo run ";
+const cargoRun = "cargo run "
 
 var BenchConfigs = {
   ed25519: {
     title: "Import Benchmark (random transfers, ed25519 signed)",
     benchCommand:
-      cargoRun + "benchmark --chain dev --execution=native --pallet \"*\" --extrinsic \"*\" --steps 32 --repeat 8 --json --record-proof"
+      cargoRun +
+      'benchmark --chain dev --execution=native --pallet "*" --extrinsic "*" --steps 32 --repeat 8 --json --record-proof',
   },
 }
 
 const prepareBranch = async function (
-  { contributor, owner, repo, bbRepo, bbRepoOwner, bbBranch, branch, baseBranch, getPushDomain, getBBPushDomain, },
+  {
+    contributor,
+    owner,
+    repo,
+    bbRepo,
+    bbRepoOwner,
+    bbBranch,
+    branch,
+    baseBranch,
+    getPushDomain,
+    getBBPushDomain,
+  },
   { benchContext },
 ) {
   const gitDirectory = path.join(cwd, "git")
@@ -75,12 +89,14 @@ const prepareBranch = async function (
 
   const repositoryPath = path.join(gitDirectory, repo)
   var { url } = await getPushDomain()
-  console.log(`push domain: ${url}`);
-  var { error, stderr } = benchContext.runTask(`git clone ${url}/${owner}/${repo} ${repositoryPath}`);
+  console.log(`push domain: ${url}`)
+  var { error, stderr } = benchContext.runTask(
+    `git clone ${url}/${owner}/${repo} ${repositoryPath}`,
+  )
   if (error) {
     // if dest path has a .git dir, ignore
     // this error handling prevents subsequent git commands from interacting with the wrong repo
-    if (! shell.test('-d', repositoryPath + '/.git')) {
+    if (!shell.test("-d", repositoryPath + "/.git")) {
       return errorResult(stderr)
     }
   }
@@ -110,7 +126,7 @@ const prepareBranch = async function (
   if (error)
     return errorResult(`Failed to add remote reference to ${owner}/${repo}`)
 
-  var bbUrl = (await getBBPushDomain()).url;
+  var bbUrl = (await getBBPushDomain()).url
   benchContext.runTask("git remote remove bb_pr_repo")
   var { error, stderr } = benchContext.runTask(
     `git remote add bb_pr_repo ${bbUrl}/${bbRepoOwner}/${bbRepo}.git`,
@@ -137,14 +153,12 @@ const prepareBranch = async function (
   if (error) return errorResult(stderr)
   */
 
-  var { error, stderr } = benchContext.runTask(
-    `git checkout -b ${bbBranch}`
-  )
+  var { error, stderr } = benchContext.runTask(`git checkout -b ${bbBranch}`)
   if (error)
-    return errorResult(`Failed to "git checkout -b" our secondary branch`);
+    return errorResult(`Failed to "git checkout -b" our secondary branch`)
 }
 
-function benchBranch(app, config) {
+function benchBranch(app: Probot, config) {
   app.log("Waiting our turn to run benchBranch...")
 
   return mutex.runExclusive(async function () {
@@ -153,7 +167,7 @@ function benchBranch(app, config) {
         return errorResult("Node benchmarks only available on Moonbeam.")
       }
 
-      console.log(`config id: ${config.id}`);
+      console.log(`config id: ${config.id}`)
 
       var id = config.id
       var benchConfig = BenchConfigs[id]
@@ -161,21 +175,25 @@ function benchBranch(app, config) {
         return errorResult(`Bench configuration for "${id}" was not found`)
       }
 
-      console.log(`bench command: ${benchConfig.benchCommand}`);
+      console.log(`bench command: ${benchConfig.benchCommand}`)
 
       const collector = new libCollector.Collector()
       var benchContext = new BenchContext(app, config)
       var { title, benchCommand } = benchConfig
       app.log(`Started benchmark "${title}."`)
 
-      var error = await prepareBranch(config, { benchContext })
+      let error = await prepareBranch(config, { benchContext })
       if (error) return error
 
-      var { stderr, error, stdout } = benchContext.runTask(
+      let {
+        stderr,
+        error: runError,
+        stdout,
+      } = benchContext.runTask(
         benchCommand,
         `Benching branch ${config.branch}...`,
       )
-      if (error) return errorResult(stderr)
+      if (runError) return errorResult(stderr)
 
       await collector.CollectBranchCustomRunner(stdout)
       let output = await collector.Report()
@@ -224,7 +242,7 @@ function checkRuntimeBenchmarkCommand(command) {
     "--repeat",
     "--chain",
   ]
-  let missing = []
+  let missing: string[] = []
   for (const flag of required) {
     if (!command.includes(flag)) {
       missing.push(flag)
@@ -252,15 +270,14 @@ function checkAllowedCharacters(command) {
 //
 // This function serves as a registry for all of this information.
 function matchMoonbeamPallet(palletIsh) {
-  switch(palletIsh) {
-
+  switch (palletIsh) {
     // "companion"
     case "crowdloan-rewards":
       return {
         name: "crowdloan-rewards",
         benchmark: "pallet_crowdloan_rewards",
         dir: "", // TODO: how can this be included in the moonbeam codebase?
-      };
+      }
 
     // found directly in the moonbeam repo
     case "parachain-staking":
@@ -268,25 +285,25 @@ function matchMoonbeamPallet(palletIsh) {
         name: "parachain-staking",
         benchmark: "parachain_staking",
         dir: "parachain-staking",
-      };
+      }
     case "author-mapping":
       return {
         name: "author-mapping",
         benchmark: "pallet_author_mapping",
         dir: "author-mapping",
-      };
+      }
     case "asset-manager":
       return {
         name: "asset-manager",
         benchmark: "pallet_asset_manager",
         dir: "asset-manager",
-      };
+      }
   }
 
-  throw new Error(`Pallet argument not recognized: ${palletIsh}`);
+  throw new Error(`Pallet argument not recognized: ${palletIsh}`)
 }
 
-function benchmarkRuntime(app, config, octokit) {
+export function benchmarkRuntime(app: Probot, config, octokit) {
   app.log("Waiting our turn to run benchmarkRuntime...")
 
   return mutex.runExclusive(async function () {
@@ -296,12 +313,12 @@ function benchmarkRuntime(app, config, octokit) {
       }
 
       let [command, ...extra] = config.extra.split(" ")
-      extra = extra.join(" ").trim();
+      extra = extra.join(" ").trim()
 
       var benchConfig
 
       // XXX: testing
-      const repo = config.repo.startsWith("moonbeam") ? "moonbeam" : config.repo;
+      const repo = config.repo.startsWith("moonbeam") ? "moonbeam" : config.repo
 
       if (repo == "moonbeam" && config.id == "runtime") {
         benchConfig = MoonbeamRuntimeBenchmarkConfigs[command]
@@ -321,10 +338,13 @@ function benchmarkRuntime(app, config, octokit) {
         // extra here should just be raw arguments to add to the command
         benchCommand += " " + extra
       } else {
-        let palletInfo = matchMoonbeamPallet(extra);
+        let palletInfo = matchMoonbeamPallet(extra)
 
         // extra here should be the name of a pallet
-        benchCommand = benchCommand.replace("{pallet_name}", palletInfo.benchmark)
+        benchCommand = benchCommand.replace(
+          "{pallet_name}",
+          palletInfo.benchmark,
+        )
         // custom output file name so that pallets with path don't cause issues
         /*
          * TODO: what is this doing?
@@ -360,10 +380,11 @@ function benchmarkRuntime(app, config, octokit) {
       if (error) return error
 
       const outputFile = benchCommand.match(/--output(?:=|\s+)(".+?"|\S+)/)[1]
-      console.log(`outputFile: ${outputFile}`);
+      console.log(`outputFile: ${outputFile}`)
       var { stdout, stderr } = benchContext.runTask(
         benchCommand,
-        `Running for branch ${config.branch}, ${outputFile ? `outputFile: ${outputFile}` : ""
+        `Running for branch ${config.branch}, ${
+          outputFile ? `outputFile: ${outputFile}` : ""
         }: ${benchCommand}`,
       )
       let extraInfo = ""
@@ -405,7 +426,6 @@ function benchmarkRuntime(app, config, octokit) {
                   stderr: last.stderr,
                 })
               }
-
             }
           } catch (error) {
             extraInfo =
@@ -414,7 +434,6 @@ function benchmarkRuntime(app, config, octokit) {
           }
 
           try {
-
             await octokit.pulls.create({
               owner: config.owner,
               repo: config.repo,
@@ -423,13 +442,11 @@ function benchmarkRuntime(app, config, octokit) {
               base: config.branch,
               body: `Weights have been updated`, // TODO
               maintainer_can_modify: false,
-
             })
           } catch (error) {
-            console.log(`Error while trying to create pull request:`);
-            console.log(error);
-            extraInfo =
-              `NOTE: Caught exception while trying to create pull request: ${error}`
+            console.log(`Error while trying to create pull request:`)
+            console.log(error)
+            extraInfo = `NOTE: Caught exception while trying to create pull request: ${error}`
             app.log.fatal({ msg: extraInfo, error })
           }
         }
@@ -447,22 +464,23 @@ function benchmarkRuntime(app, config, octokit) {
   })
 }
 
-function benchRustup(app, config) {
+export function benchRustup(app: Probot, config) {
   app.log("Waiting our turn to run benchRustup...")
 
   return mutex.runExclusive(async function () {
     try {
-
       // right now only `rustup update` is supported.
       if (config.extra != "update") {
-        return errorResult(`Invalid "rustup" command. Only "update" is supported.`)
+        return errorResult(
+          `Invalid "rustup" command. Only "update" is supported.`,
+        )
       }
 
       const collector = new libCollector.Collector()
       var benchContext = new BenchContext(app, config)
 
-      let benchCommand = "rustup update";
-      let title = "Rustup Update";
+      let benchCommand = "rustup update"
+      let title = "Rustup Update"
 
       var { stderr, error, stdout } = benchContext.runTask(
         benchCommand,
@@ -474,15 +492,10 @@ function benchRustup(app, config) {
         title,
         output: stdout ? stdout : stderr,
         extraInfo: "",
-        benchCommand
+        benchCommand,
       }
     } catch (error) {
       return errorResult("Caught exception in benchRustup", error)
     }
   })
-}
-
-module.exports = {
-  benchmarkRuntime: benchmarkRuntime,
-  benchRustup: benchRustup,
 }
